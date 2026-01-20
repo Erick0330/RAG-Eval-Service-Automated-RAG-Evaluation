@@ -22,15 +22,22 @@ from langchain_huggingface import HuggingFaceEmbeddings
 
 # CONFIGURACIÓN DE AMBIENTE
 os.environ["LANGCHAIN_TRACING_V2"] = "true"
-os.environ["LANGCHAIN_API_KEY"] = "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"
-os.environ["LANGCHAIN_PROJECT"] = "Evaluacion_RAG_N8N"
+os.environ["LANGCHAIN_ENDPOINT"] = "https://api.smith.langchain.com"
+os.environ["LANGCHAIN_API_KEY"] = os.getenv("LANGCHAIN_API_KEY")
+os.environ["LANGCHAIN_PROJECT"] = os.getenv("LANGCHAIN_PROJECT", "Evaluacion_RAG_Cloud")
+
 
 app = FastAPI()
 
-# 1. Configurar LLM con Groq
+# 1. Configurar LLM con Groq usando la variable de entorno
+groq_key = os.getenv("GROQ_API_KEY")
+
+if not groq_key:
+    print("❌ ERROR: No se encontró GROQ_API_KEY en las variables de entorno")
+
 evaluator_llm = ChatGroq(
     model="llama-3.3-70b-versatile",
-    api_key="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"
+    api_key=groq_key
 )
 ragas_llm = LangchainLLMWrapper(evaluator_llm)
 
@@ -87,6 +94,7 @@ async def evaluate_to_langsmith(request: EvaluationRequest):
         raise HTTPException(status_code=500, detail=str(e))
 
 if __name__ == "__main__":
-    import os
+    import uvicorn
+    # Render asigna un puerto dinámico, lo capturamos aquí:
     port = int(os.environ.get("PORT", 8000))
     uvicorn.run(app, host="0.0.0.0", port=port)
