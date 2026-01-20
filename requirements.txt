@@ -1,0 +1,9 @@
+fastapi
+uvicorn
+ragas
+langchain-groq
+langchain-huggingface
+sentence-transformers
+datasets
+langsmith
+pydantic
