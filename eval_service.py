@@ -6,9 +6,9 @@ import uvicorn
 
 # Importaciones de Ragas y LangChain
 from langchain_groq import ChatGroq
+from langchain_openai import OpenAIEmbeddings
 from ragas.llms import LangchainLLMWrapper
 from ragas.embeddings import LangchainEmbeddingsWrapper
-from langchain_huggingface import HuggingFaceEmbeddings
 from ragas import EvaluationDataset
 from ragas.metrics import faithfulness, answer_relevancy, context_precision, context_recall
 from ragas import evaluate
@@ -18,6 +18,7 @@ os.environ["LANGCHAIN_TRACING_V2"] = "true"
 os.environ["LANGCHAIN_ENDPOINT"] = "https://api.smith.langchain.com"
 os.environ["LANGCHAIN_API_KEY"] = os.getenv("LANGCHAIN_API_KEY", "")
 os.environ["LANGCHAIN_PROJECT"] = os.getenv("LANGCHAIN_PROJECT", "Evaluacion_RAG_Cloud")
+os.environ["OPENAI_API_KEY"] = os.getenv("OPENAI_API_KEY", "")
 
 app = FastAPI(title="RAG Evaluation Service")
 
@@ -32,30 +33,26 @@ class EvaluationRequest(BaseModel):
     project_name: str
     cases: List[TestCase]
 
-# --- CONFIGURAR LLM Y EMBEDDINGS ---
+# --- CONFIGURAR LLM (GROQ) Y EMBEDDINGS (OPENAI) ---
 groq_key = os.getenv("GROQ_API_KEY")
+openai_key = os.getenv("OPENAI_API_KEY")
 
-# Inicializamos el evaluador (Groq)
-evaluator_llm = ChatGroq(
-    model="llama-3.3-70b-versatile",
-    api_key=groq_key
-)
+if not groq_key or not openai_key:
+    print("❌ ERROR: Faltan llaves de API (GROQ o OPENAI) en las variables de entorno")
+
+# 1. Evaluador principal (Groq - Llama 3.3)
+evaluator_llm = ChatGroq(model="llama-3.3-70b-versatile", api_key=groq_key)
 ragas_llm = LangchainLLMWrapper(evaluator_llm)
 
-# Inicializamos Embeddings de HuggingFace (Para evitar el error de OpenAI)
-# Usamos un modelo muy ligero para que Render no de Timeout
-encoder = HuggingFaceEmbeddings(model_name="sentence-transformers/all-MiniLM-L6-v2")
+# 2. Embeddings (OpenAI - Muy ligero y rápido para Render)
+encoder = OpenAIEmbeddings(api_key=openai_key)
 ragas_embeddings = LangchainEmbeddingsWrapper(encoder)
 
 # --- RUTAS ---
 
 @app.get("/")
 def health_check():
-    return {
-        "status": "ok", 
-        "message": "RAG Eval Service is running",
-        "project": os.environ.get("LANGCHAIN_PROJECT")
-    }
+    return {"status": "ok", "message": "RAG Eval Service is running with Groq + OpenAI Embeddings"}
 
 @app.post("/evaluate-to-langsmith")
 async def evaluate_to_langsmith(request: EvaluationRequest):
@@ -71,7 +68,7 @@ async def evaluate_to_langsmith(request: EvaluationRequest):
         
         dataset = EvaluationDataset.from_list(data_dicts)
         
-        # Ejecutamos la evaluación pasando explícitamente el motor de embeddings
+        # Ejecutar evaluación
         result = evaluate(
             dataset=dataset,
             metrics=[faithfulness, answer_relevancy, context_precision, context_recall],
@@ -81,16 +78,14 @@ async def evaluate_to_langsmith(request: EvaluationRequest):
         
         return {
             "status": "success",
-            "project_name": request.project_name,
             "scores": result.scores,
-            "message": "Resultados enviados a LangSmith"
+            "message": "Enviado a LangSmith con éxito"
         }
 
     except Exception as e:
         print(f"❌ Error durante la evaluación: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
 
-# --- INICIO DEL SERVICIO ---
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 10000))
     uvicorn.run(app, host="0.0.0.0", port=port)
