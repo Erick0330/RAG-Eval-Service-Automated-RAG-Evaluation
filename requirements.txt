@@ -1,9 +1,8 @@
 fastapi
 uvicorn
-ragas
+pydantic
 langchain-groq
+ragas
+langchain
 langchain-huggingface
 sentence-transformers
-datasets
-langsmith
-pydantic
