@@ -1,26 +1,36 @@
 import os
+import numpy as np
+import pandas as pd
+from datetime import datetime
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 from typing import List
 import uvicorn
+import traceback
 
 # Importaciones de Ragas y LangChain
 from langchain_groq import ChatGroq
-from langchain_openai import OpenAIEmbeddings
 from ragas.llms import LangchainLLMWrapper
 from ragas.embeddings import LangchainEmbeddingsWrapper
+from langchain_huggingface import HuggingFaceEmbeddings
 from ragas import EvaluationDataset
 from ragas.metrics import faithfulness, answer_relevancy, context_precision, context_recall
 from ragas import evaluate
 
-# --- CONFIGURACIÓN DE AMBIENTE ---
-os.environ["LANGCHAIN_TRACING_V2"] = "true"
-os.environ["LANGCHAIN_ENDPOINT"] = "https://api.smith.langchain.com"
-os.environ["LANGCHAIN_API_KEY"] = os.getenv("LANGCHAIN_API_KEY", "")
-os.environ["LANGCHAIN_PROJECT"] = os.getenv("LANGCHAIN_PROJECT", "Evaluacion_RAG_Cloud")
-os.environ["OPENAI_API_KEY"] = os.getenv("OPENAI_API_KEY", "")
+app = FastAPI(title="RAG Evaluation to Sheets Service")
 
-app = FastAPI(title="RAG Evaluation Service")
+# --- CONFIGURAR MODELOS ---
+groq_key = os.getenv("GROQ_API_KEY")
+base_model = ChatGroq(
+    model="llama-3.1-8b-instant", 
+    api_key=groq_key,
+    n=1, 
+    temperature=0
+)
+
+ragas_llm = LangchainLLMWrapper(base_model)
+encoder = HuggingFaceEmbeddings(model_name="sentence-transformers/all-MiniLM-L6-v2")
+ragas_embeddings = LangchainEmbeddingsWrapper(encoder)
 
 # --- MODELOS DE DATOS ---
 class TestCase(BaseModel):
@@ -33,30 +43,17 @@ class EvaluationRequest(BaseModel):
     project_name: str
     cases: List[TestCase]
 
-# --- CONFIGURAR LLM (GROQ) Y EMBEDDINGS (OPENAI) ---
-groq_key = os.getenv("GROQ_API_KEY")
-openai_key = os.getenv("OPENAI_API_KEY")
+# --- UTILIDAD PARA LIMPIAR DATOS ---
+def limpiar_valor(val):
+    """Asegura que los valores sean compatibles con JSON y Sheets (evita NaN/Inf)"""
+    if pd.isna(val) or np.isinf(val):
+        return 0.0
+    return float(val)
 
-if not groq_key or not openai_key:
-    print("❌ ERROR: Faltan llaves de API (GROQ o OPENAI) en las variables de entorno")
-
-# 1. Evaluador principal (Groq - Llama 3.3)
-evaluator_llm = ChatGroq(model="llama-3.3-70b-versatile", api_key=groq_key)
-ragas_llm = LangchainLLMWrapper(evaluator_llm)
-
-# 2. Embeddings (OpenAI - Muy ligero y rápido para Render)
-encoder = OpenAIEmbeddings(api_key=openai_key)
-ragas_embeddings = LangchainEmbeddingsWrapper(encoder)
-
-# --- RUTAS ---
-
-@app.get("/")
-def health_check():
-    return {"status": "ok", "message": "RAG Eval Service is running with Groq + OpenAI Embeddings"}
-
-@app.post("/evaluate-to-langsmith")
-async def evaluate_to_langsmith(request: EvaluationRequest):
+@app.post("/evaluate-for-sheets")
+async def evaluate_for_sheets(request: EvaluationRequest):
     try:
+        # 1. Preparar el dataset para Ragas
         data_dicts = []
         for case in request.cases:
             data_dicts.append({
@@ -66,26 +63,42 @@ async def evaluate_to_langsmith(request: EvaluationRequest):
                 "reference": case.ground_truth
             })
         
-        dataset = EvaluationDataset.from_list(data_dicts)
+        dataset_ragas = EvaluationDataset.from_list(data_dicts)
         
-        # Ejecutar evaluación
+        # 2. Ejecutar Evaluación
         result = evaluate(
-            dataset=dataset,
+            dataset=dataset_ragas,
             metrics=[faithfulness, answer_relevancy, context_precision, context_recall],
             llm=ragas_llm,
             embeddings=ragas_embeddings
         )
         
+        # 3. Convertir a Pandas para facilitar la iteración
+        df = result.to_pandas()
+        
+        # 4. Construir el arreglo de objetos para el cliente
+        filas_para_sheet = []
+        for _, row in df.iterrows():
+            objeto_fila = {
+                "pregunta": row["user_input"],
+                # Métricas redondeadas a 4 decimales
+                "fidelidad": limpiar_valor(row["faithfulness"]),
+                "relevancia": limpiar_valor(row["answer_relevancy"]),
+                "precision_contexto": limpiar_valor(row["context_precision"]),
+                "recuperacion_contexto": limpiar_valor(row["context_recall"])
+            }
+            filas_para_sheet.append(objeto_fila)
+
+        # 5. Devolver el arreglo listo para Sheets
         return {
             "status": "success",
-            "scores": result.scores,
-            "message": "Enviado a LangSmith con éxito"
+            "project": request.project_name,
+            "data": filas_para_sheet
         }
 
     except Exception as e:
-        print(f"❌ Error durante la evaluación: {str(e)}")
+        print(f"❌ Error:\n{traceback.format_exc()}")
         raise HTTPException(status_code=500, detail=str(e))
 
 if __name__ == "__main__":
-    port = int(os.environ.get("PORT", 10000))
-    uvicorn.run(app, host="0.0.0.0", port=port)
+    uvicorn.run(app, host="0.0.0.0", port=7860)

@@ -1,77 +1,53 @@
-# 🤖 RAG-Eval Service: Automated RAG Evaluation
-
-[![Python 3.12+](https://img.shields.io/badge/python-3.12+-blue.svg)](https://www.python.org/downloads/)
-[![FastAPI](https://img.shields.io/badge/FastAPI-0.100+-05998b.svg)](https://fastapi.tiangolo.com/)
-[![Groq](https://img.shields.io/badge/Powered%20by-Groq-orange.svg)](https://groq.com/)
-
-Este servicio es un bridge de evaluación automatizada para pipelines de **RAG (Retrieval-Augmented Generation)**. Permite recibir casos de prueba desde herramientas como **n8n**, evaluarlos usando **Ragas** con modelos de **Groq** y visualizar los resultados detallados en **LangSmith**.
-
+---
+title: RAG Precision & Evaluation Engine
+emoji: 🚀
+colorFrom: blue
+colorTo: indigo
+sdk: docker
+pinned: false
 ---
 
-## 🚀 Características Principales
+# 🧠 RAG Evaluation Service (Ragas + Groq + LangSmith)
 
-* **Métricas de Ragas:** Evaluación de *Faithfulness*, *Answer Relevancy*, *Answer Correctness* y *Context Precision*.
-* **Groq Integration:** Inferencia ultra rápida usando Llama 3.3-70b sin costo de OpenAI.
-* **Local Embeddings:** Uso de `sentence-transformers` ejecutados localmente para evitar costos de API.
-* **LangSmith Native:** Trazabilidad completa de cada evaluación.
-* **Cloud Ready:** Configurado para despliegue inmediato en **Render** o **Hugging Face**.
+Este servicio proporciona un motor de evaluación automatizado para sistemas de **Generación Aumentada por Recuperación (RAG)**. Utiliza el framework **Ragas** y modelos de lenguaje de última generación (**Llama 3.3 70B vía Groq**) para auditar la calidad de las respuestas en base a cuatro pilares científicos.
 
----
+## 🔬 Marco Teórico de Evaluación
+
+El motor analiza la relación entre la **Pregunta**, los **Contextos Recuperados** y la **Respuesta Generada** mediante las siguientes métricas:
+
+| Métrica | Dimensión | Descripción Científica |
+| :--- | :--- | :--- |
+| **Faithfulness** | Generación | Mide la consistencia factual de la respuesta con el contexto recuperado (evita alucinaciones). |
+| **Answer Relevancy** | Generación | Evalúa qué tan directa y completa es la respuesta respecto a la consulta del usuario. |
+| **Context Precision** | Recuperación | Califica la calidad del ranking de los documentos recuperados (S/N ratio). |
+| **Context Recall** | Recuperación | Verifica si toda la información necesaria para responder fue efectivamente encontrada. |
+
+
 
 ## 🛠️ Stack Tecnológico
 
-* **Framework:** FastAPI (Python)
-* **Evaluación:** Ragas
-* **LLM:** Groq (Llama-3.3-70b-versatile)
-* **Embeddings:** Hugging Face (`all-MiniLM-L6-v2`)
-* **Tracking:** LangSmith
+* **Motor de Evaluación:** [Ragas](https://docs.ragas.io/) (Retrieval-Augmented Generation Assessment).
+* **Inferencia:** [Groq Cloud](https://groq.com/) (Llama 3.3 70B Versatile).
+* **Embeddings:** `sentence-transformers/all-MiniLM-L6-v2` vía Hugging Face.
+* **Observabilidad:** [LangSmith](https://smith.langchain.com/) para trazado de experimentos.
+* **API:** FastAPI (Python 3.10+).
 
----
+## 🚀 Guía de Uso (API Endpoint)
 
-## 📦 Instalación Local
+### `POST /evaluate-for-sheets`
 
-1.  **Clonar el repositorio:**
-    ```bash
-    git clone [https://github.com/tu-usuario/rag-eval-service.git](https://github.com/tu-usuario/rag-eval-service.git)
-    cd rag-eval-service
-    ```
+Envía un batch de casos de prueba para obtener un análisis detallado compatible con Google Sheets o n8n.
 
-2.  **Instalar dependencias:**
-    ```bash
-    pip install -r requirements.txt
-    ```
-
-3.  **Configurar variables de entorno:**
-    Crea un archivo `.env` o configúralas en tu panel de hosting:
-    ```bash
-    GROQ_API_KEY=tu_clave_de_groq
-    LANGCHAIN_API_KEY=tu_clave_de_langsmith
-    LANGCHAIN_TRACING_V2=true
-    LANGCHAIN_PROJECT=RAG_Evaluation_N8N
-    ```
-
-4.  **Ejecutar el servidor:**
-    ```bash
-    python eval_service.py
-    ```
-
----
-
-## 📡 API Reference
-
-### Evaluar Dataset
-`POST /evaluate-to-langsmith`
-
-**Request Body:**
+**Cuerpo de la petición (JSON):**
 ```json
 {
-  "project_name": "Test_N8N",
+  "project_name": "GDS_Turismo_V2",
   "cases": [
     {
-      "question": "¿Cuál es el horario?",
-      "answer": "El horario es de 9am a 5pm",
-      "contexts": ["Nuestro horario de atención es de lunes a viernes de 9am a 5pm"],
-      "ground_truth": "De 9am a 5pm"
+      "question": "¿Cómo accedo al módulo de autos?",
+      "answer": "Debes ir a la pestaña superior...",
+      "contexts": ["Manual Usuario pág 45: El módulo de autos se encuentra..."],
+      "ground_truth": "El acceso se realiza mediante el menú superior, sección vehículos."
     }
   ]
 }

@@ -1,7 +1,13 @@
 fastapi
 uvicorn
 pydantic
-langchain-groq
-langchain-openai
-ragas
+langchain-huggingface
+sentence-transformers
 langchain
+fastapi
+ragas
+langchain-groq
+langsmith
+pandas
+numpy
+python-dotenv
