@@ -1,12 +1,3 @@
----
-title: RAG Precision & Evaluation Engine
-emoji: 🚀
-colorFrom: blue
-colorTo: indigo
-sdk: docker
-pinned: false
----
-
 # 🧠 RAG Evaluation Service (Ragas + Groq + LangSmith)
 
 Este servicio proporciona un motor de evaluación automatizado para sistemas de **Generación Aumentada por Recuperación (RAG)**. Utiliza el framework **Ragas** y modelos de lenguaje de última generación (**Llama 3.3 70B vía Groq**) para auditar la calidad de las respuestas en base a cuatro pilares científicos.
